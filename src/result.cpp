@@ -61,6 +61,19 @@ void convertEntries(std::shared_ptr<const CT> in, NullCol nullCol, RT &out,
   }
 }
 
+template<>
+void convertEntries<ch::ColumnDecimal, Rcpp::StringVector>(std::shared_ptr<const ch::ColumnDecimal> in, NullCol nullCol, Rcpp::StringVector &out,
+                                                         size_t offset, size_t start, size_t end) {
+  for(size_t j = start; j < end; j++) {
+    // can't use the ternary operator here, since that would require explicit
+    // conversion from the Clickhouse storage type (which is far messier)
+    if(nullCol && nullCol->IsNull(j)) {
+      out[offset+j-start] = Rcpp::StringVector::get_na();
+    } else {
+      out[offset+j-start] = (in->At(j).to_string());
+    }
+  }
+}
 
 template<>
 void convertEntries<ch::ColumnInt64, Rcpp::StringVector>(std::shared_ptr<const ch::ColumnInt64> in, NullCol nullCol, Rcpp::StringVector &out,
@@ -277,6 +290,9 @@ std::unique_ptr<Converter> Result::buildConverter(std::string name, ch::TypeRef 
     }
     case TC::UInt64: {
       return std::unique_ptr<ScalarConverter<ch::ColumnUInt64, Rcpp::StringVector>>(new ScalarConverter<ch::ColumnUInt64, Rcpp::StringVector>);
+    }
+    case TC::Decimal: {
+      return std::unique_ptr<ScalarConverter<ch::ColumnDecimal, Rcpp::StringVector>>(new ScalarConverter<ch::ColumnDecimal, Rcpp::StringVector>);
     }
     case TC::UUID:
       return std::unique_ptr<ScalarConverter<ch::ColumnUUID, Rcpp::StringVector>>(new ScalarConverter<ch::ColumnUUID, Rcpp::StringVector>);

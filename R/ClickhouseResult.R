@@ -27,6 +27,7 @@ setMethod("dbFetch", signature = "ClickhouseResult", definition = function(res, 
   }
   ret <- fetch(res@ptr, n)
   ret <- convert_Int64(ret, res@Int64)
+  ret <- convert_Decimal(ret)
 
   if(res@toUTF8 == TRUE) ret <- encode_UTF(ret)
 
@@ -48,6 +49,28 @@ convert_Int64 <- function(df, Int64) {
   return(df)}else{
     return(df)
   }
+}
+
+convert_Decimal <- function(df) {
+# identify the columns by index that need changing
+  toConvert <- which(grepl("Decimal", attr(df, 'data.type')))
+
+# get the scales
+  parse_scale <- function(str){
+    x <- strsplit(str, ",")[[1]][[2]]
+    x <- substr(x,1,nchar(x)-1)
+    x <- as.numeric(x)
+    return(as.numeric(x))
+  }
+
+  for(column_i in toConvert) {
+    raw_type <- attr(df, 'data.type')[[column_i]]
+    scale <- parse_scale(raw_type)
+    # forces String to decimal representation
+    df[column_i] <- lapply(df[column_i], as.numeric)
+    df[column_i] <- df[column_i] / (10^scale)
+  }
+  return(df)
 }
 
 encode_UTF <- function(df){

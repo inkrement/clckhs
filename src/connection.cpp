@@ -10,6 +10,8 @@
 using namespace Rcpp;
 using namespace clickhouse;
 
+ColumnRef convertDecimalColumn(SEXP v);
+
 // [[Rcpp::export]]
 DataFrame fetch(XPtr<Result> res, ssize_t n) {
   return res->fetchFrame(n);
@@ -165,10 +167,10 @@ std::shared_ptr<CT> vecToScalar(SEXP v, std::shared_ptr<ColumnUInt8> nullCol = n
   type_of_cor = Rf_inherits(v, "integer64") ? 99 : type_of;
 
   switch(type_of_cor) {
-  case 99: {
-    toColumnN<CT, NumericVector>(v, col, nullCol);
-    break;
-  }
+    case 99: {
+      toColumnN<CT, NumericVector>(v, col, nullCol);
+      break;
+    }
     case INTSXP: {
       // the lambda could be a default argument of toColumn, but that
       // appears to trigger a bug in GCC
@@ -337,7 +339,12 @@ std::shared_ptr<CT> vecToEnum(SEXP v, TypeRef type, std::shared_ptr<ColumnUInt8>
 
 ColumnRef vecToColumn(TypeRef t, SEXP v, std::shared_ptr<ColumnUInt8> nullCol = nullptr) {
   using TC = Type::Code;
+
+  printf("%i insert THIS   !!!\n",t->GetCode());
+
   switch(t->GetCode()) {
+    case TC::Decimal:
+      return convertDecimalColumn(v);
     case TC::Int8:
       return vecToScalar<ColumnInt8, int8_t>(v, nullCol);
     case TC::Int16:
@@ -427,9 +434,26 @@ void insert(XPtr<Client> conn, String tableName, DataFrame df) {
     ColumnRef ccol = vecToColumn(colTypes[i], df[i]);
     block.AppendColumn(std::string(names[i]), ccol);
   }
-
   conn->Insert(tableName, block);
 }
+
+ColumnRef convertDecimalColumn(SEXP v) {
+// R_CH-column: Rcpp IntegerVector
+  IntegerVector cv = Rcpp::as<IntegerVector>(v);
+
+
+  // CH_CPP-column: sharedPtr to ColumnDecimal with (18,1)
+  std::shared_ptr<ColumnDecimal> col  = std::make_shared<ColumnDecimal>(18, 1);
+
+
+  for(typename IntegerVector::stored_type e : cv) {
+    col->Append(e);
+  }
+
+  return col;
+}
+
+
 
 // [[Rcpp::export]]
 bool validPtr(SEXP ptr) {
